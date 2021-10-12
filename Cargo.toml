@@ -1,0 +1,21 @@
+[package]
+name = "termin-8"
+version = "0.1.2"
+authors = ["Tobias V. Langhoff"]
+edition = "2018"
+license = "MIT"
+description = "CHIP-8 emulator that runs in your terminal"
+repository = "https://github.com/tobiasvl/termin-8"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+clap = "2.33"
+#rand = "0.8.4"
+crossterm = "0.21"
+#drawille = "0.3"
+rust-ini = "0.17"
+dirs = "4.0"
+ansi_colours = "^1.0"
+#deca = { path = "../deca" }
+deca = "0.0.2"
