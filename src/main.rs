@@ -7,9 +7,6 @@ use ini::Ini;
 extern crate clap;
 use clap::{crate_version, App, Arg};
 
-//mod chip8;
-//use chip8::Chip8;
-//use chip8::Quirks;
 extern crate deca;
 use deca::Chip8;
 use deca::Quirks;
@@ -22,13 +19,14 @@ use dirs::{config_dir, home_dir};
 
 use crossterm::{
     cursor,
-    event::{poll, read, Event, KeyCode, KeyEvent, KeyModifiers},
-    execute, queue, style, terminal,
+    event::{poll, read, Event, KeyCode, KeyModifiers},
+    execute, queue, style,
+    style::Stylize,
+    terminal,
     terminal::{
         disable_raw_mode, enable_raw_mode, size, Clear, ClearType, DisableLineWrap, EnableLineWrap,
         EnterAlternateScreen, LeaveAlternateScreen,
     },
-    Result,
 };
 use std::io::{stdout, Write};
 use std::time::Duration;
@@ -52,7 +50,7 @@ fn main() {
                 .long("config")
                 .takes_value(true)
                 .value_name("CONFIG_FILE")
-                .help("Configuration file, compatible with C-Octo")
+                .help("Configuration file, compatible with C-Octo\nIf not supplied, we will attempt to find a file with the same name and in the same location as the current ROM, but with an '.octo.rc' file extension, for easy per-game configuration.\nIf that doesn't exist, the default is ~/.octo.rc")
                 .default_value("~/.octo.rc")
         )
         .arg(Arg::with_name("quirks")
@@ -60,8 +58,13 @@ fn main() {
                 .long("quirks")
                 .takes_value(true)
                 .value_name("COMPATIBILITY_PROFILE")
-                .help("Force quirky behavior for platform compatibility.\n(For fine-tuned quirks configuration, you can toggle individual settings in a configuration file; see --config)\nPossible values: chip8, schip, octo")
+                .help("Force quirky behavior for platform compatibility.\n(For fine-tuned quirks configuration, you can toggle individual settings in a configuration file; see --config)\nPossible values: vip, schip, octo")
                 .default_value("octo")
+        )
+        .arg(Arg::with_name("debug")
+            .short("d")
+            .long("debug")
+            .help("Starts execution in interrupted mode, for easier debugging")
         )
         .arg(
             Arg::with_name("ROM")
@@ -109,26 +112,29 @@ fn main() {
             logic: false,
             clip: false,
             vblank: false,
-            resclear: false,
+            resclear: true,
             delaywrap: false,
             multicollision: false,
-            loresbigsprite: false,
+            loresbigsprite: true,
             lorestallsprite: false,
             max_rom: 65024,
         },
     };
 
-    let mut chip8 = Chip8::new(quirks);
+    let mut chip8 = Chip8::new();
+    chip8.set_quirks(quirks);
 
     if rom.len() > chip8.quirks.max_rom as usize {
-        println!("Warning: ROM size ({}) exceeds maximum available memory on target platform ({}) (will try to run anyway)", rom.len(), chip8.quirks.max_rom)
+        println!("Warning: ROM size ({}) exceeds maximum available memory on target platform ({}). Will not run on real hardware.", rom.len(), chip8.quirks.max_rom);
+        println!("Press any key to run it anyway.");
+        let _ = read();
     }
 
     chip8.read_rom(&rom);
 
-    let tickrate = match matches.value_of("num") {
-        None => 400,
+    let tickrate = match matches.value_of("tickrate") {
         Some(s) => s.parse::<u16>().unwrap_or(400),
+        _ => panic!("Tickrate must be a number"),
     };
 
     let mut stdout = stdout();
@@ -140,11 +146,12 @@ fn main() {
     let conf = Ini::load_from_file("/home/tvl/.octo.rc").unwrap();
     let section = conf.section(None::<String>).unwrap();
 
-    let bg_color = color_from_ini(section, "color.plane0");
-    let fg_color = color_from_ini(section, "color.plane1");
-
-    execute!(stdout, style::SetBackgroundColor(bg_color)).unwrap();
-    execute!(stdout, style::SetForegroundColor(fg_color)).unwrap();
+    let colors = vec![
+        color_from_ini(section, "color.plane0").unwrap_or(style::Color::Black),
+        color_from_ini(section, "color.plane1").unwrap_or(style::Color::White),
+        color_from_ini(section, "color.plane2").unwrap_or(style::Color::Red),
+        color_from_ini(section, "color.plane3").unwrap_or(style::Color::Green),
+    ];
 
     let big_charset = vec!["  ", "██"];
     let thin_charset = vec![" ", "█"];
@@ -152,19 +159,21 @@ fn main() {
     let smallest_charset = vec![
         " ", "▗", "▖", "▄", "▝", "▐", "▞", "▟", "▘", "▚", "▌", "▙", "▀", "▜", "▛", "█",
     ];
-    let (width, height) = size().unwrap();
-    let mut charset = if width >= chip8.display.width * 2 && height >= chip8.display.height {
-        &big_charset
-    } else {
-        //if width >= chip8.display.width && height >= chip8.display.height {
-        &thin_charset
-        //    } else if width >= chip8.display.width / 2 && height >= chip8.display.height {
-        //        &small_charset
-        //    } else {
-        //        &smallest_charset
-    };
 
-    let mut interrupt = true;
+    let (width, height) = size().unwrap();
+    let mut charset =
+        if width >= (chip8.display.width * 2).into() && height >= chip8.display.height.into() {
+            &big_charset
+        } else {
+            //if width >= chip8.display.width && height >= chip8.display.height {
+            &thin_charset
+            //    } else if width >= chip8.display.width / 2 && height >= chip8.display.height {
+            //        &small_charset
+            //    } else {
+            //        &smallest_charset
+        };
+
+    let mut interrupt = matches.is_present("debug");
     let mut halted = false;
 
     loop {
@@ -233,17 +242,18 @@ fn main() {
                         execute!(stdout, Clear(ClearType::All)).unwrap();
                         execute!(stdout, cursor::Hide).unwrap();
                         chip8.display.dirty = true;
-                        charset =
-                            if width >= chip8.display.width * 2 && height >= chip8.display.height {
-                                &big_charset
-                            } else {
-                                // if width >= chip8.display.width && height >= chip8.display.height {
-                                &thin_charset
-                                //} else if width >= chip8.display.width / 2 && height >= chip8.display.height {
-                                //    &small_charset
-                                //} else {
-                                //    &smallest_charset
-                            };
+                        charset = if width >= (chip8.display.width * 2).into()
+                            && height >= chip8.display.height.into()
+                        {
+                            &big_charset
+                        } else {
+                            // if width >= chip8.display.width && height >= chip8.display.height {
+                            &thin_charset
+                            //} else if width >= chip8.display.width / 2 && height >= chip8.display.height {
+                            //    &small_charset
+                            //} else {
+                            //    &smallest_charset
+                        };
                     }
                     _ => (),
                 }
@@ -253,33 +263,37 @@ fn main() {
         }
 
         if chip8.display.dirty {
+            chip8.display.dirty = false;
             let (width, height) = size().unwrap();
 
             execute!(
                 stdout,
                 terminal::SetTitle(format!(
-                    "{}x{} actual, {}x{} c8, {} colors",
+                    "{}x{} actual, {}x{} c8, {} colors, {} ticks",
                     width.to_string(),
                     height.to_string(),
                     chip8.display.width.to_string(),
                     chip8.display.height.to_string(),
-                    style::available_color_count()
+                    style::available_color_count(),
+                    tickrate
                 ))
             )
             .unwrap();
 
             // draw to terminal
             queue!(stdout, cursor::MoveTo(0, 0)).unwrap();
-            execute!(stdout, style::SetBackgroundColor(bg_color)).unwrap();
-            execute!(stdout, style::SetForegroundColor(fg_color)).unwrap();
+            execute!(stdout, style::SetBackgroundColor(colors[0])).unwrap();
+            execute!(stdout, style::SetForegroundColor(colors[1])).unwrap();
 
-            if width >= chip8.display.width && height >= chip8.display.height {
+            if width >= chip8.display.width.into() && height >= chip8.display.height.into() {
                 for y in 0..chip8.display.height {
-                    for x in 0..chip8.display.width {
+                    for x in 0..chip8.display.width.into() {
+                        let pixel = chip8.display.display[y as usize][x as usize] as usize;
                         queue!(
                             stdout,
                             style::Print(
-                                charset[chip8.display.display[y as usize][x as usize] as usize]
+                                charset[if pixel > 0 { 1 } else { 0 }]
+                                    .with(colors[pixel])
                                     .to_string()
                             )
                         )
@@ -287,9 +301,11 @@ fn main() {
                     }
                     queue!(stdout, cursor::MoveToNextLine(0)).unwrap();
                 }
-            } else if width >= chip8.display.width && height >= chip8.display.height / 2 {
+            } else if width >= chip8.display.width.into()
+                && height >= (chip8.display.height / 2).into()
+            {
                 for y in (0..chip8.display.height).step_by(2) {
-                    for x in 0..chip8.display.width {
+                    for x in 0..chip8.display.width.into() {
                         let pixels = (chip8.display.display[y as usize][x as usize] << 1)
                             | chip8.display.display[(y + 1) as usize][x as usize];
                         queue!(
@@ -332,7 +348,7 @@ fn main() {
             stdout.flush().unwrap();
         }
         if interrupt || halted {
-            execute!(stdout, cursor::MoveTo(0, chip8.display.height + 1)).unwrap();
+            execute!(stdout, cursor::MoveTo(0, (chip8.display.height + 1).into())).unwrap();
             execute!(stdout, style::ResetColor).unwrap();
             if halted {
                 execute!(stdout, style::SetForegroundColor(style::Color::Red)).unwrap();
@@ -372,7 +388,7 @@ fn main() {
             execute!(stdout, style::ResetColor).unwrap();
             execute!(
                 stdout,
-                cursor::MoveTo(0, chip8.display.height + 1),
+                cursor::MoveTo(0, (chip8.display.height + 1).into()),
                 Clear(ClearType::FromCursorDown)
             )
             .unwrap();
@@ -381,9 +397,11 @@ fn main() {
     }
 }
 
-fn color_from_ini(section: &ini::Properties, attribute: &str) -> style::Color {
+fn color_from_ini(section: &ini::Properties, attribute: &str) -> Option<style::Color> {
     let mut v = vec![];
-    let mut cur = section.get(attribute).unwrap();
+    let cur = section.get(attribute);
+    cur?;
+    let mut cur = cur.unwrap();
     while !cur.is_empty() {
         let (chunk, rest) = cur.split_at(std::cmp::min(2, cur.len()));
         v.push(chunk);
@@ -397,13 +415,13 @@ fn color_from_ini(section: &ini::Properties, attribute: &str) -> style::Color {
     );
 
     if style::available_color_count() > 256 {
-        style::Color::Rgb {
+        Some(style::Color::Rgb {
             r: rgb.0,
             g: rgb.1,
             b: rgb.2,
-        }
+        })
     } else {
-        style::Color::AnsiValue(ansi256_from_rgb(rgb))
+        Some(style::Color::AnsiValue(ansi256_from_rgb(rgb)))
     }
 }
 
