@@ -8,37 +8,76 @@ It uses [`deca`](https://crates.io/crates/deca) as the emulator backend, which s
 
 Note that the terminal size requirements vary depending on what kind of program you attempt to run.
 
-### CHIP-8
+Here's a table with the required terminal size and Unicode support needed to get features such as XO-CHIP color support, depending on the resolution of the CHIP-8 program you're running and the [Unicode Block Elements](https://en.wikipedia.org/wiki/Block_Elements) support of your font:
 
-For running regular, 64x32 CHIP-8 programs, your options are the following:
+<table>
+<tr>
+<th>CHIP-8 resolution</td>
+<th>Unicode version</td>
+<th>Minimum terminal size</td>
+<th>Pixel size</td>
+<th>XO-CHIP colors</td>
+</tr>
 
-* 128 x 32 terminal size, for large and square pixels
-* 64 x 32 terminal size, for rectangular pixels
-* 64 x 16 terminal size and a font that supports Unicode Block Elements characters, for small and square pixels
-* 32 x 16 terminal size and a font that supports the expanded Unicode Block Elements character set, for small and rectangular pixels
+<tr>
+<td rowspan="4">64x32 (lores)<br>CHIP-8, SCHIP, XO-CHIP</td>
+<td rowspan="3">1.0.0</td>
+<td>128x32</td>
+<td>██</td>
+<td>✔</td>
+</tr>
 
-### SUPER-CHIP
+<tr>
+<td>64x32</td>
+<td>█</td>
+<td>✔</td>
+</tr>
 
-For running 128 x 64 SUPER-CHIP programs:
+<tr>
+<td>64x16</td>
+<td>▀</td>
+<td>✔</td>
+</tr>
 
-* 256 x 64 terminal size, for large and square pixels
-* 128 x 64 terminal size, for rectangular pixels
-* 128 x 32 terminal size and a font that supports Unicode Block Elements characters, for small and square pixels
-* 64 x 32 terminal size and a font that supports the expanded Unicode Block Elements character set, for small and rectangular pixels
+<tr>
+<td>3.2</td>
+<td>32x16</td>
+<td>▘</td>
+<td>❌</td>
+</tr>
 
-### XO-CHIP
+<tr>
+<td rowspan="4">128x64 (hires)<br>SCHIP, XO-CHIP</td>
+<td rowspan="3">1.0.0</td>
+<td>256x64</td>
+<td>██</td>
+<td>✔</td>
+</tr>
 
-For running 128 x 64 XO-CHIP programs with color:
+<tr>
+<td>128x64</td>
+<td>█</td>
+<td>✔</td>
+</tr>
 
-* 256 x 64 terminal size, for large and square pixels with color support
-* 128 x 64 terminal size, for rectangular pixels with color support
-* 128 x 32 terminal size and a font that supports Unicode Block Elements characters, for small and square pixels with color support
+<tr>
+<td>128x32</td>
+<td>▀</td>
+<td>✔</td>
+</tr>
 
-If you don't need color support:
+<tr>
+<td>3.2</td>
+<td>64x32</td>
+<td>▘</td>
+<td>❌</td>
+</tr>
 
-* 64 x 32 terminal size and a font that supports the expanded Unicode Block Elements character set, for small and rectangular pixels
+</table>
 
-Note that most XO-CHIP programs use color.
+Notes:
+* In your browser, the smallest pixel block (▘) probably looks square, but this might not be the case with your monospace terminal font.
+* Pretty much all fonts support the basic [Unicode Block Elements](https://en.wikipedia.org/wiki/Block_Elements) in Unicode 1.0.0 which are used for the larger pixel blocks (█, ▀ and ▄), but support for the smallest blocks (like ▘) from Unicode 3.2 is much less common. Font families like _DejaVu_ and _Fira Code_ support them.
 
 ## Installation
 
