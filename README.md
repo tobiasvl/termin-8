@@ -123,3 +123,8 @@ Here's a table with the required terminal size and Unicode support needed to get
 Notes:
 * In your browser, the smallest pixel block (▘) probably looks square, but this might not be the case with your monospace terminal font.
 * Pretty much all fonts support the basic [Unicode Block Elements](https://en.wikipedia.org/wiki/Block_Elements) in Unicode 1.0.0 which are used for the larger pixel blocks (█, ▀ and ▄), but support for the smallest blocks (like ▘) from Unicode 3.2 is much less common. Font families like _DejaVu_ and _Fira Code_ support them.
+
+## Limitations
+
+* Some games might not detect keypresses correctly. This is because [detecting when a key is released is very hard in a terminal](https://blog.robertelder.org/detect-keyup-event-linux-terminal/). Termin-8 does an approximation of keypress duration, but your OS's "key repeat" settings will influence how often it can poll for key presses.
+* Your terminal's bell will sound when there's sound, but XO-CHIP music is not supported (as a terminal can't play sound on its own).

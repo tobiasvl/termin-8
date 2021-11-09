@@ -1,15 +1,11 @@
-extern crate ansi_colours;
 use ansi_colours::*;
 
-extern crate ini;
 use ini::Ini;
 
-extern crate clap;
 use clap::{crate_version, App, Arg};
 
-extern crate deca;
-use deca::Chip8;
-use deca::Quirks;
+use deca::*;
+use octopt::*;
 
 //extern crate drawille;
 //use drawille::Canvas;
@@ -68,7 +64,7 @@ fn main() {
         )
         .arg(
             Arg::with_name("ROM")
-                .help("CHIP-8 ROM file")
+                .help("CHIP-8 game file (binary ROM file, .o8 Octo source file, or .gif Octocart)")
                 .required(true) // for the time being
                 //.index(1),
         )
@@ -76,59 +72,21 @@ fn main() {
 
     let rom = std::fs::read(matches.value_of("ROM").unwrap()).expect("Couldn't load ROM");
 
-    let quirks = match matches.value_of("quirks").unwrap() {
-        "vip" => Quirks {
-            shift: false,
-            loadstore: false,
-            jump0: false,
-            logic: true,
-            clip: true,
-            vblank: true,
-            resclear: false,
-            delaywrap: false,
-            multicollision: false,
-            loresbigsprite: false,
-            lorestallsprite: false,
-            max_rom: 3216,
-        },
-        "schip" => Quirks {
-            shift: true,
-            loadstore: true,
-            jump0: true,
-            logic: false,
-            clip: true,
-            vblank: false,
-            resclear: false,
-            delaywrap: false,
-            multicollision: false,
-            loresbigsprite: false,
-            lorestallsprite: false,
-            max_rom: 3583,
-        },
-        _ => Quirks {
-            shift: false,
-            loadstore: false,
-            jump0: false,
-            logic: false,
-            clip: false,
-            vblank: false,
-            resclear: true,
-            delaywrap: false,
-            multicollision: false,
-            loresbigsprite: true,
-            lorestallsprite: false,
-            max_rom: 65024,
-        },
+    let platform = match matches.value_of("quirks").unwrap() {
+        "vip" => Platform::Vip,
+        "schip" => Platform::Schip,
+        _ => Platform::Octo,
     };
 
-    let mut chip8 = Chip8::new();
-    chip8.set_quirks(quirks);
+    let mut chip8 = Chip8::new(platform);
 
-    if rom.len() > chip8.quirks.max_rom as usize {
-        println!("Warning: ROM size ({}) exceeds maximum available memory on target platform ({}). Will not run on real hardware.", rom.len(), chip8.quirks.max_rom);
-        println!("Press any key to run it anyway.");
-        let _ = read();
-    }
+    if let Some(max_size) = chip8.options.max_size {
+        if rom.len() > max_size as usize {
+            println!("Warning: ROM size ({}) exceeds maximum available memory on target platform ({}). Will not run on real hardware.", rom.len(), max_size);
+            println!("Press any key to run it anyway.");
+            let _ = read();
+        }
+    };
 
     chip8.read_rom(&rom);
 
@@ -194,71 +152,67 @@ fn main() {
         for key in chip8.keyboard.iter_mut() {
             *key = false;
         }
-        loop {
-            if poll(Duration::from_millis(1)).unwrap() {
-                // It's guaranteed that the `read()` won't block when the `poll()`
-                // function returns `true`
-                match read().unwrap() {
-                    Event::Key(keyevent) => match keyevent.code {
-                        KeyCode::Esc => exit(),
-                        KeyCode::Char('1') => chip8.keyboard[0x1] = true,
-                        KeyCode::Char('2') => chip8.keyboard[0x2] = true,
-                        KeyCode::Char('3') => chip8.keyboard[0x3] = true,
-                        KeyCode::Char('4') => chip8.keyboard[0xC] = true,
-                        KeyCode::Char('q') | KeyCode::Char(' ') => chip8.keyboard[0x4] = true,
-                        KeyCode::Char('w') | KeyCode::Up => chip8.keyboard[0x5] = true,
-                        KeyCode::Char('e') => chip8.keyboard[0x6] = true,
-                        KeyCode::Char('r') => chip8.keyboard[0xD] = true,
-                        KeyCode::Char('a') | KeyCode::Left => chip8.keyboard[0x7] = true,
-                        KeyCode::Char('s') | KeyCode::Down => chip8.keyboard[0x8] = true,
-                        KeyCode::Char('d') | KeyCode::Right => chip8.keyboard[0x9] = true,
-                        KeyCode::Char('f') => chip8.keyboard[0xE] = true,
-                        KeyCode::Char('z') => chip8.keyboard[0xA] = true,
-                        KeyCode::Char('x') => chip8.keyboard[0x0] = true,
-                        KeyCode::Char('c') => {
-                            if keyevent.modifiers.contains(KeyModifiers::CONTROL) {
-                                exit()
-                            } else {
-                                chip8.keyboard[0xB] = true
-                            }
-                        }
-                        KeyCode::Char('v') => chip8.keyboard[0xF] = true,
-                        KeyCode::Char('i') => interrupt = !interrupt,
-                        KeyCode::Char('o') => {
-                            if interrupt && !halted {
-                                halt_message = match chip8.run(1) {
-                                    Err(error) => {
-                                        halted = true;
-                                        error
-                                    }
-                                    Ok(_) => "".to_string(),
-                                }
-                            }
-                        }
-                        KeyCode::Char('m') => (),
-                        _ => (),
-                    },
-                    Event::Resize(width, height) => {
-                        execute!(stdout, Clear(ClearType::All)).unwrap();
-                        execute!(stdout, cursor::Hide).unwrap();
-                        chip8.display.dirty = true;
-                        charset = if width >= (chip8.display.width * 2).into()
-                            && height >= chip8.display.height.into()
-                        {
-                            &big_charset
+        while poll(Duration::from_millis(1)).unwrap() {
+            // It's guaranteed that the `read()` won't block when the `poll()`
+            // function returns `true`
+            match read().unwrap() {
+                Event::Key(keyevent) => match keyevent.code {
+                    KeyCode::Esc => exit(),
+                    KeyCode::Char('1') => chip8.keyboard[0x1] = true,
+                    KeyCode::Char('2') => chip8.keyboard[0x2] = true,
+                    KeyCode::Char('3') => chip8.keyboard[0x3] = true,
+                    KeyCode::Char('4') => chip8.keyboard[0xC] = true,
+                    KeyCode::Char('q') | KeyCode::Char(' ') => chip8.keyboard[0x4] = true,
+                    KeyCode::Char('w') | KeyCode::Up => chip8.keyboard[0x5] = true,
+                    KeyCode::Char('e') => chip8.keyboard[0x6] = true,
+                    KeyCode::Char('r') => chip8.keyboard[0xD] = true,
+                    KeyCode::Char('a') | KeyCode::Left => chip8.keyboard[0x7] = true,
+                    KeyCode::Char('s') | KeyCode::Down => chip8.keyboard[0x8] = true,
+                    KeyCode::Char('d') | KeyCode::Right => chip8.keyboard[0x9] = true,
+                    KeyCode::Char('f') => chip8.keyboard[0xE] = true,
+                    KeyCode::Char('z') => chip8.keyboard[0xA] = true,
+                    KeyCode::Char('x') => chip8.keyboard[0x0] = true,
+                    KeyCode::Char('c') => {
+                        if keyevent.modifiers.contains(KeyModifiers::CONTROL) {
+                            exit()
                         } else {
-                            // if width >= chip8.display.width && height >= chip8.display.height {
-                            &thin_charset
-                            //} else if width >= chip8.display.width / 2 && height >= chip8.display.height {
-                            //    &small_charset
-                            //} else {
-                            //    &smallest_charset
-                        };
+                            chip8.keyboard[0xB] = true
+                        }
                     }
+                    KeyCode::Char('v') => chip8.keyboard[0xF] = true,
+                    KeyCode::Char('i') => interrupt = !interrupt,
+                    KeyCode::Char('o') => {
+                        if interrupt && !halted {
+                            halt_message = match chip8.run(1) {
+                                Err(error) => {
+                                    halted = true;
+                                    error
+                                }
+                                Ok(_) => "".to_string(),
+                            }
+                        }
+                    }
+                    KeyCode::Char('m') => (),
                     _ => (),
+                },
+                Event::Resize(width, height) => {
+                    execute!(stdout, Clear(ClearType::All)).unwrap();
+                    execute!(stdout, cursor::Hide).unwrap();
+                    chip8.display.dirty = true;
+                    charset = if width >= (chip8.display.width * 2).into()
+                        && height >= chip8.display.height.into()
+                    {
+                        &big_charset
+                    } else {
+                        // if width >= chip8.display.width && height >= chip8.display.height {
+                        &thin_charset
+                        //} else if width >= chip8.display.width / 2 && height >= chip8.display.height {
+                        //    &small_charset
+                        //} else {
+                        //    &smallest_charset
+                    };
                 }
-            } else {
-                break;
+                _ => (),
             }
         }
 
@@ -347,7 +301,7 @@ fn main() {
             };
             stdout.flush().unwrap();
         }
-        if interrupt || halted {
+        if interrupt || halted || true {
             execute!(stdout, cursor::MoveTo(0, (chip8.display.height + 1).into())).unwrap();
             execute!(stdout, style::ResetColor).unwrap();
             if halted {
@@ -355,6 +309,9 @@ fn main() {
                 execute!(stdout, style::Print(halt_message.to_string())).unwrap();
                 execute!(stdout, cursor::MoveToNextLine(0)).unwrap();
                 execute!(stdout, style::ResetColor).unwrap();
+            } else if interrupt {
+                execute!(stdout, style::Print("user interrupt".to_string())).unwrap();
+                execute!(stdout, cursor::MoveToNextLine(0)).unwrap();
             };
             execute!(
                 stdout,
