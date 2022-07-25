@@ -1,6 +1,7 @@
 Termin-8
 ========
 [![crates.io](https://img.shields.io/crates/v/termin-8.svg)](https://crates.io/crates/termin-8)
+[![dependency status](https://deps.rs/repo/github/tobiasvl/termin-8/status.svg)](https://deps.rs/crate/termin-8)
 
 Octo-compliant CHIP-8 emulator frontend that runs in your terminal.
 

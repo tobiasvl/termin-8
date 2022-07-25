@@ -1,11 +1,11 @@
-use ansi_colours::*;
+use ansi_colours::ansi256_from_rgb;
 
 use ini::Ini;
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_authors, crate_description, crate_name, crate_version, App, Arg};
 
-use deca::*;
-use octopt::*;
+use deca::Chip8;
+use octopt::{Options, Platform};
 
 //extern crate drawille;
 //use drawille::Canvas;
@@ -29,12 +29,12 @@ use std::time::Duration;
 use std::u8;
 
 fn main() {
-    let matches = App::new("Termin-8")
+    let matches = App::new(crate_name!())
         .version(crate_version!())
-        .author("Tobias V. Langhoff <tobias@langhoff.no>")
-        .about("Octo emulator")
+        .author(crate_authors!())
+        .about(crate_description!())
         .arg(Arg::with_name("tickrate")
-                .short("t")
+                .short('t')
                 .long("tickrate")
                 .takes_value(true)
                 .value_name("TICKRATE")
@@ -42,7 +42,7 @@ fn main() {
                 .default_value("40")
         )
         .arg(Arg::with_name("config")
-                .short("c")
+                .short('c')
                 .long("config")
                 .takes_value(true)
                 .value_name("CONFIG_FILE")
@@ -50,7 +50,7 @@ fn main() {
                 .default_value("~/.octo.rc")
         )
         .arg(Arg::with_name("quirks")
-                .short("q")
+                .short('q')
                 .long("quirks")
                 .takes_value(true)
                 .value_name("COMPATIBILITY_PROFILE")
@@ -58,7 +58,7 @@ fn main() {
                 .default_value("octo")
         )
         .arg(Arg::with_name("debug")
-            .short("d")
+            .short('d')
             .long("debug")
             .help("Starts execution in interrupted mode, for easier debugging")
         )
@@ -78,13 +78,13 @@ fn main() {
         _ => Platform::Octo,
     };
 
-    let mut chip8 = Chip8::new(platform);
+    let mut chip8 = Chip8::new(Options::new(platform));
 
     if let Some(max_size) = chip8.options.max_size {
         if rom.len() > max_size as usize {
             println!("Warning: ROM size ({}) exceeds maximum available memory on target platform ({}). Will not run on real hardware.", rom.len(), max_size);
             println!("Press any key to run it anyway.");
-            let _ = read();
+            let _key = read();
         }
     };
 
@@ -147,9 +147,7 @@ fn main() {
             "".to_string()
         };
 
-        // check for debug keypress
-        // check for regular keypress?
-        for key in chip8.keyboard.iter_mut() {
+        for key in &mut chip8.keyboard {
             *key = false;
         }
         while poll(Duration::from_millis(1)).unwrap() {
@@ -162,7 +160,7 @@ fn main() {
                     KeyCode::Char('2') => chip8.keyboard[0x2] = true,
                     KeyCode::Char('3') => chip8.keyboard[0x3] = true,
                     KeyCode::Char('4') => chip8.keyboard[0xC] = true,
-                    KeyCode::Char('q') | KeyCode::Char(' ') => chip8.keyboard[0x4] = true,
+                    KeyCode::Char('q' | ' ') => chip8.keyboard[0x4] = true,
                     KeyCode::Char('w') | KeyCode::Up => chip8.keyboard[0x5] = true,
                     KeyCode::Char('e') => chip8.keyboard[0x6] = true,
                     KeyCode::Char('r') => chip8.keyboard[0xD] = true,
@@ -174,9 +172,9 @@ fn main() {
                     KeyCode::Char('x') => chip8.keyboard[0x0] = true,
                     KeyCode::Char('c') => {
                         if keyevent.modifiers.contains(KeyModifiers::CONTROL) {
-                            exit()
+                            exit();
                         } else {
-                            chip8.keyboard[0xB] = true
+                            chip8.keyboard[0xB] = true;
                         }
                     }
                     KeyCode::Char('v') => chip8.keyboard[0xF] = true,
@@ -192,7 +190,7 @@ fn main() {
                             }
                         }
                     }
-                    KeyCode::Char('m') => (),
+                    KeyCode::Char('m') => todo!(), // TODO Display memory monitors
                     _ => (),
                 },
                 Event::Resize(width, height) => {
@@ -220,16 +218,14 @@ fn main() {
             chip8.display.dirty = false;
             let (width, height) = size().unwrap();
 
+            // FIXME temporary debug title
             execute!(
                 stdout,
                 terminal::SetTitle(format!(
-                    "{}x{} actual, {}x{} c8, {} colors, {} ticks",
-                    width.to_string(),
-                    height.to_string(),
-                    chip8.display.width.to_string(),
-                    chip8.display.height.to_string(),
+                    "{width}x{height} actual, {}x{} c8, {} colors, {tickrate} ticks",
+                    chip8.display.width,
+                    chip8.display.height,
                     style::available_color_count(),
-                    tickrate
                 ))
             )
             .unwrap();
@@ -241,7 +237,7 @@ fn main() {
 
             if width >= chip8.display.width.into() && height >= chip8.display.height.into() {
                 for y in 0..chip8.display.height {
-                    for x in 0..chip8.display.width.into() {
+                    for x in 0..chip8.display.width {
                         let pixel = chip8.display.display[y as usize][x as usize] as usize;
                         queue!(
                             stdout,
@@ -259,7 +255,7 @@ fn main() {
                 && height >= (chip8.display.height / 2).into()
             {
                 for y in (0..chip8.display.height).step_by(2) {
-                    for x in 0..chip8.display.width.into() {
+                    for x in 0..chip8.display.width {
                         let pixels = (chip8.display.display[y as usize][x as usize] << 1)
                             | chip8.display.display[(y + 1) as usize][x as usize];
                         queue!(
@@ -301,7 +297,7 @@ fn main() {
             };
             stdout.flush().unwrap();
         }
-        if interrupt || halted || true {
+        if interrupt || halted {
             execute!(stdout, cursor::MoveTo(0, (chip8.display.height + 1).into())).unwrap();
             execute!(stdout, style::ResetColor).unwrap();
             if halted {
