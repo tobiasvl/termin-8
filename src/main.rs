@@ -1,13 +1,12 @@
 use ansi_colours::ansi256_from_rgb;
+use clap::Parser;
 
 use ini::Ini;
-
-use clap::{crate_authors, crate_description, crate_name, crate_version, App, Arg};
 
 use deca::Chip8;
 use octopt::{Options, Platform};
 
-//use dirs::{config_dir, home_dir};
+use dirs::{config_dir, home_dir};
 
 use anyhow::Result;
 use crossterm::{
@@ -15,78 +14,59 @@ use crossterm::{
     style,
     terminal::{disable_raw_mode, enable_raw_mode, size},
 };
-use std::io::{stdout, Write};
 use std::time::Duration;
 use std::u8;
+use std::{
+    io::{stdout, Write},
+    path::PathBuf,
+};
 
 mod terminal;
 use terminal::Terminal;
 
+#[derive(Parser, Debug)]
+#[clap(author, version, about, long_about = None)]
+struct Args {
+    /// CHIP-8 game file (binary ROM file, .o8 Octo source file, or .gif Octocart)
+    #[clap(value_parser, value_name = "ROM")]
+    rom: PathBuf,
+
+    /// Instructions to execute per 60Hz frame
+    #[clap(short, long, value_name = "TICKRATE", value_parser = clap::value_parser!(u16).range(1..))]
+    tickrate: Option<u16>,
+
+    /// Configuration file, compatible with C-Octo. In order, we will read the supplied file, a user-wide file in your home directory, and finally a file the same name and in the same location as the current ROM, but with an '.octo.rc' file extension, for easy per-game configuration.
+    #[clap(short, long, value_name = "CONFIG_FILE", value_parser)]
+    config: Option<PathBuf>,
+
+    /// Symbol file, compatible with C-Octo
+    #[clap(short, long, value_name = "SYMBOL_FILE")]
+    symbols: Option<PathBuf>,
+
+    /// Force quirky behavior for platform compatibility.
+    /// (For fine-tuned quirks configuration, you can toggle individual settings in a configuration file; see --config)
+    /// Possible values: vip, schip, octo
+    #[clap(short, long, value_name = "COMPATIBILITY_PROFILE", arg_enum, default_value_t = Platform::Octo)]
+    quirks: Platform,
+
+    /// Starts execution in interrupted mode, for easier debugging
+    #[clap(short, long)]
+    debug: bool,
+}
+
 //#[allow(clippy::too_many_lines)]
 fn main() -> Result<()> {
-    let matches = App::new(crate_name!())
-        .version(crate_version!())
-        .author(crate_authors!())
-        .about(crate_description!())
-        .arg(Arg::with_name("tickrate")
-                .short('t')
-                .long("tickrate")
-                .takes_value(true)
-                .value_name("TICKRATE")
-                .help("Instructions to execute per 60Hz frame")
-                .default_value("40")
-        )
-        .arg(Arg::with_name("config")
-                .short('c')
-                .long("config")
-                .takes_value(true)
-                .value_name("CONFIG_FILE")
-                .help("Configuration file, compatible with C-Octo\nIf not supplied, we will attempt to find a file with the same name and in the same location as the current ROM, but with an '.octo.rc' file extension, for easy per-game configuration.")
-                .default_value("~/.octo.rc")
-        )
-        .arg(Arg::with_name("symbols")
-                .short('s')
-                .long("symbols")
-                .takes_value(true)
-                .value_name("SYMBOL_FILE")
-                .help("Symbol file, compatible with C-Octo")
-                .default_value("~/.octo.rc")
-        )
-        .arg(Arg::with_name("quirks")
-                .short('q')
-                .long("quirks")
-                .takes_value(true)
-                .value_name("COMPATIBILITY_PROFILE")
-                .help("Force quirky behavior for platform compatibility.\n(For fine-tuned quirks configuration, you can toggle individual settings in a configuration file; see --config)\nPossible values: vip, schip, octo")
-                .default_value("octo")
-        )
-        .arg(Arg::with_name("debug")
-            .short('d')
-            .long("debug")
-            .help("Starts execution in interrupted mode, for easier debugging")
-        )
-        .arg(
-            Arg::with_name("ROM")
-                .help("CHIP-8 game file (binary ROM file, .o8 Octo source file, or .gif Octocart)")
-                .required(true)
-        )
-        .get_matches();
+    let args = Args::parse();
 
-    let rom = std::fs::read(matches.value_of("ROM").unwrap())?;
+    let rom = std::fs::read(args.rom)?;
 
-    let platform = match matches.value_of("quirks").unwrap() {
-        "vip" => Platform::Vip,
-        "schip" => Platform::Schip,
-        _ => Platform::Octo,
-    };
-
-    let mut chip8 = Chip8::new(Options::new(platform));
+    let mut chip8 = Chip8::new(Options::new(args.quirks));
 
     let mut stdout = stdout();
 
     if let Some(max_size) = chip8.options.max_size {
         if rom.len() > max_size as usize {
-            println!("Warning: ROM size ({}) exceeds maximum available memory on target platform ({}). Will not run on real hardware.", rom.len(), max_size);
+            println!("Warning: ROM size ({}) exceeds maximum available memory on target platform {} ({}). Will not run on real hardware.", rom.len(), args.quirks, max_size);
             print!("Press any key to run it anyway. ");
             stdout.flush()?;
             enable_raw_mode()?;
@@ -99,8 +79,8 @@ fn main() -> Result<()> {
     chip8.read_rom(&rom);
 
     // TODO this can be better. Maybe use figment?
-    let tickrate = match matches.value_of("tickrate") {
-        Some(s) => s.parse::<u16>().unwrap_or(500),
+    let tickrate = match args.tickrate {
+        Some(s) => s,
         None => chip8.options.tickrate.unwrap_or(500),
     };
 
@@ -119,7 +99,7 @@ fn main() -> Result<()> {
     let mut terminal = Terminal::new(colors)?;
     terminal.resize(size()?, (chip8.display.width, chip8.display.height))?;
 
-    let mut interrupt = matches.is_present("debug");
+    let mut interrupt = args.debug;
     let mut halted = false;
     let mut halt_message = "".to_string();
 
@@ -184,7 +164,8 @@ fn main() -> Result<()> {
                     terminal
                         .resize((width, height), (chip8.display.width, chip8.display.height))?;
                 }
-                Event::Mouse(_) => (), // TODO
+                Event::Mouse(_) => todo!(),
+                _ => (),
             }
         }
 

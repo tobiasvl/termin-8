@@ -50,17 +50,12 @@ You can press <kbd>Esc</kbd> to exit.
 
 ## Debugging capabilities
 
-Termin-8 can be used for testing while developing CHIP-8 games, as an alternative to [Octo](https://JohnEarnest.github.io/Octo) (web) and [C-Octo](https://github.com/JohnEarnest/C-Octo) (SDL).
-
-However, Termin-8 can't yet compile Octo code on its own. In an all-terminal workflow, use C-Octo's [`octo-cli`](https://github.com/JohnEarnest/c-octo#octo-cli) tool to compile your code. `octo-cli` can output a symbol file alongside the CHIP-8 binary if you use the `-s` command line option, and `-s` is likewise supported by Termin-8 for reading such a symbol file.
-
-If a symbol file containing breakpoints is loaded, hitting those breakpoints will interrupt execution and display the contents of all registers.
+Termin-8 can be used for testing while developing CHIP-8 games, as an alternative to [Octo](https://JohnEarnest.github.io/Octo) (web) and [C-Octo](https://github.com/JohnEarnest/C-Octo) (SDL). However, Termin-8 can't yet compile Octo code on its own. In an all-terminal workflow, use C-Octo's [`octo-cli`](https://github.com/JohnEarnest/c-octo#octo-cli) tool to compile your code.
 
 Press the following keys while Termin-8 is running for further debugging:
 
 * <kbd>i</kbd>: interrupt execution and display contents of registers (or continue execution after interrupt)
 * <kbd>o</kbd>: single-step (while interrupted)
-* <kbd>Esc</kbd>: exit
 
 ## Terminal requirements
 

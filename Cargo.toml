@@ -1,6 +1,6 @@
 [package]
 name = "termin-8"
-version = "0.1.6"
+version = "0.1.7"
 authors = ["Tobias V. Langhoff <tobias@langhoff.no>"]
 edition = "2021"
 license = "MIT"
@@ -9,13 +9,13 @@ repository = "https://github.com/tobiasvl/termin-8"
 categories = ["emulators"]
 
 [dependencies]
-clap = { version = "3.2", features = ["cargo"] }
-crossterm = "0.24"
+clap = { version = "3.2", features = ["derive"] }
+crossterm = "0.25"
 drawille = "0.3"
 rust-ini = "0.18"
 dirs = "4.0"
 ansi_colours = "1.1"
 #deca = { path = "../deca" }
-octopt = "0.1"
-deca = "0.0.9"
+octopt = "1.0"
+deca = "0.0.10"
 anyhow = "1.0"
