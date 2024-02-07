@@ -50,12 +50,19 @@ You can press <kbd>Esc</kbd> to exit.
 
 ## Debugging capabilities
 
-Termin-8 can be used for testing while developing CHIP-8 games, as an alternative to [Octo](https://JohnEarnest.github.io/Octo) (web) and [C-Octo](https://github.com/JohnEarnest/C-Octo) (SDL). However, Termin-8 can't yet compile Octo code on its own. In an all-terminal workflow, use C-Octo's [`octo-cli`](https://github.com/JohnEarnest/c-octo#octo-cli) tool to compile your code.
+Termin-8 can be used for testing while developing CHIP-8 games, as an alternative to [Octo](https://JohnEarnest.github.io/Octo) (web) and [C-Octo](https://github.com/JohnEarnest/C-Octo) (SDL).
+
+However, Termin-8 can't yet compile Octo code on its own. In an all-terminal workflow, use C-Octo's [`octo-cli`](https://github.com/JohnEarnest/c-octo#octo-cli) tool to compile your code. `octo-cli` can output a symbol file alongside the CHIP-8 binary if you use the `-s` command line option, and `-s` is likewise supported by Termin-8 for reading such a symbol file.
+
+If a symbol file containing breakpoints is loaded, hitting those breakpoints will interrupt execution and display the contents of all registers.
 
 Press the following keys while Termin-8 is running for further debugging:
 
 * <kbd>i</kbd>: interrupt execution and display contents of registers (or continue execution after interrupt)
 * <kbd>o</kbd>: single-step (while interrupted)
+* <kbd>u</kbd>: step out (execute until the current subroutine returns) 
+* <kbd>l</kbd>: step over (execute the contents of any subroutines until they return to the current level)
+* <kbd>m</kbd>: toggle monitors (if a symbol file containing monitors has been loaded)
 
 ## Terminal requirements
 
@@ -73,7 +80,7 @@ Here's a table with the required terminal size and Unicode support needed to get
 </tr>
 
 <tr>
-<td rowspan="5">64x32 (lores)<br>CHIP-8, SCHIP, XO-CHIP</td>
+<td rowspan="4">64x32 (lores)<br>CHIP-8, SCHIP, XO-CHIP</td>
 <td rowspan="3">1.0.0</td>
 <td>128x32</td>
 <td>██</td>

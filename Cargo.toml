@@ -15,7 +15,7 @@ drawille = "0.3"
 rust-ini = "0.18"
 dirs = "4.0"
 ansi_colours = "1.1"
-#deca = { path = "../deca" }
+deca = { path = "../deca" }
 octopt = "1.0"
-deca = "0.0.10"
+#deca = "0.0.10"
 anyhow = "1.0"

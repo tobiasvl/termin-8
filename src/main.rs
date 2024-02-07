@@ -70,7 +70,7 @@ fn main() -> Result<()> {
             print!("Press any key to run it anyway. ");
             stdout.flush()?;
             enable_raw_mode()?;
-            let _ = read()?;
+            let _key = read()?;
             disable_raw_mode()?;
             println!();
         }
@@ -142,8 +142,12 @@ fn main() -> Result<()> {
                     }
                     KeyCode::Char('v') => chip8.keyboard[0xF] = true,
                     KeyCode::Char('i') => {
+                        if interrupt {
+                            terminal.erase_debug(&chip8)?;
+                        } else {
+                            halt_message = "user interrupt".to_string();
+                        }
                         interrupt = !interrupt;
-                        halt_message = "user interrupt".to_string();
                     }
                     KeyCode::Char('o') => {
                         if interrupt && !halted {
@@ -160,8 +164,7 @@ fn main() -> Result<()> {
                     _ => (),
                 },
                 Event::Resize(width, height) => {
-                    chip8.display.dirty = true;
-                    terminal
+                    chip8.display.dirty = terminal
                         .resize((width, height), (chip8.display.width, chip8.display.height))?;
                 }
                 Event::Mouse(_) => todo!(),
@@ -174,7 +177,9 @@ fn main() -> Result<()> {
             terminal.draw_display(&chip8)?;
         }
 
-        terminal.draw_debug(&chip8, interrupt, halted, &halt_message)?;
+        if interrupt || halted {
+            terminal.draw_debug(&chip8, interrupt, halted, &halt_message)?;
+        }
         // TODO play sound if chip8.sound is greater than 0
     }
 

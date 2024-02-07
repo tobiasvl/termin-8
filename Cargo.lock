@@ -246,12 +246,20 @@ dependencies = [
 [[package]]
 name = "deca"
 version = "0.0.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1a79c5ff2d3c16aa27cedef1c8177881acdda575d91b33d4b543890f84e1e344"
 dependencies = [
+ "decasm",
  "fastrand",
  "itertools",
  "octopt",
+ "ux",
+]
+
+[[package]]
+name = "decasm"
+version = "0.1.1"
+dependencies = [
+ "itertools",
+ "ux",
 ]
 
 [[package]]
@@ -904,6 +912,12 @@ name = "unicode-ident"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c4f5b37a154999a8f3f98cc23a628d850e154479cd94decf3414696e12e31aaf"
+
+[[package]]
+name = "ux"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2cb3ff47e36907a6267572c1e398ff32ef78ac5131de8aa272e53846592c207e"
 
 [[package]]
 name = "version_check"

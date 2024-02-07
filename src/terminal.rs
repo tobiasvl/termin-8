@@ -12,7 +12,7 @@ use std::io::{stdout, Stdout, Write};
 
 use deca::Chip8;
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Eq, PartialEq)]
 pub(crate) enum TerminalSize {
     Big = 0,
     Thin = 1,
@@ -45,8 +45,8 @@ impl Terminal {
         &mut self,
         (width, height): (u16, u16),
         (c8width, c8height): (u8, u8),
-    ) -> Result<()> {
-        self.term_size = if width >= u16::from(c8width) * 2 && height >= c8height.into() {
+    ) -> Result<bool> {
+        let new_term_size = if width >= u16::from(c8width) * 2 && height >= c8height.into() {
             TerminalSize::Big
         } else if width >= c8width.into() && height >= c8height.into() {
             TerminalSize::Thin
@@ -57,8 +57,18 @@ impl Terminal {
         } else {
             TerminalSize::Braille
         };
-        execute!(self.stdout, Clear(ClearType::All), cursor::Hide)?;
-        Ok(())
+        Ok(if new_term_size == self.term_size {
+            false
+        } else {
+            self.term_size = new_term_size;
+            execute!(
+                self.stdout,
+                style::ResetColor,
+                Clear(ClearType::All),
+                cursor::Hide
+            )?;
+            true
+        })
     }
 
     #[inline(always)]
@@ -82,6 +92,8 @@ impl Terminal {
         match term_size {
             TerminalSize::Big | TerminalSize::Thin => {
                 for y in 0..chip8.display.height {
+                    queue!(stdout, style::SetBackgroundColor(self.colors[0]))?;
+                    queue!(stdout, style::SetForegroundColor(self.colors[1]))?;
                     for x in 0..chip8.display.width {
                         let pixel = chip8.display.display[y as usize][x as usize] as usize;
                         queue!(
@@ -94,12 +106,16 @@ impl Terminal {
                         )?;
                     }
                     //if y < chip8.display.height - 1 {
+                    queue!(stdout, style::ResetColor)?;
                     queue!(stdout, cursor::MoveToNextLine(0))?;
                     //}
                 }
             }
+            // TODO add color support
             TerminalSize::Small => {
                 for y in (0..chip8.display.height).step_by(2) {
+                    queue!(stdout, style::SetBackgroundColor(self.colors[0]))?;
+                    queue!(stdout, style::SetForegroundColor(self.colors[1]))?;
                     for x in 0..chip8.display.width {
                         let pixels = (chip8.display.display[y as usize][x as usize] << 1)
                             | chip8.display.display[(y + 1) as usize][x as usize];
@@ -109,23 +125,26 @@ impl Terminal {
                         )?;
                     }
                     //if y < (chip8.display.height / 2) - 1 {
+                    queue!(stdout, style::ResetColor)?;
                     queue!(stdout, cursor::MoveToNextLine(0))?;
                     //}
                 }
             }
             TerminalSize::Smallest => {
                 for y in (0..chip8.display.height).step_by(2) {
+                    let mut row = String::with_capacity(usize::from(chip8.display.height / 2));
                     for x in (0..chip8.display.width).step_by(2) {
                         let pixels = (chip8.display.display[y as usize][x as usize] << 3)
                             | (chip8.display.display[y as usize][(x + 1) as usize] << 2)
                             | (chip8.display.display[(y + 1) as usize][x as usize] << 1)
                             | chip8.display.display[(y + 1) as usize][(x + 1) as usize];
-                        queue!(
-                            stdout,
-                            style::Print(SMALLEST_CHARSET[pixels as usize].to_string())
-                        )?;
+                        row.push_str(SMALLEST_CHARSET[pixels as usize]);
                     }
+                    queue!(stdout, style::SetBackgroundColor(self.colors[0]))?;
+                    queue!(stdout, style::SetForegroundColor(self.colors[1]))?;
+                    queue!(stdout, style::Print(row))?;
                     //if y < (chip8.display.height / 2) - 1 {
+                    queue!(stdout, style::ResetColor)?;
                     queue!(stdout, cursor::MoveToNextLine(0))?;
                     //}
                 }
@@ -143,12 +162,15 @@ impl Terminal {
                     }
                 }
                 for row in canvas.rows() {
+                    queue!(stdout, style::SetBackgroundColor(self.colors[0]))?;
+                    queue!(stdout, style::SetForegroundColor(self.colors[1]))?;
                     queue!(stdout, style::Print(row))?;
+                    queue!(stdout, style::ResetColor)?;
                     queue!(stdout, cursor::MoveToNextLine(0))?;
                 }
             }
         }
-        queue!(stdout, cursor::MoveTo(0, 0))?;
+        queue!(stdout, style::ResetColor, cursor::MoveTo(0, 0))?;
         stdout.flush()?;
         Ok(())
     }
@@ -160,56 +182,57 @@ impl Terminal {
         halted: bool,
         halt_message: &str,
     ) -> Result<()> {
-        if interrupt || halted {
-            queue!(
-                self.stdout,
-                cursor::MoveTo(0, (chip8.display.height + 1).into())
-            )?;
-            queue!(self.stdout, style::ResetColor)?;
-            if halted {
-                queue!(self.stdout, style::SetForegroundColor(style::Color::Red))?;
-                queue!(self.stdout, style::Print(halt_message.to_string()))?;
-                queue!(self.stdout, cursor::MoveToNextLine(0))?;
-                queue!(self.stdout, style::ResetColor)?;
-            } else if interrupt {
-                queue!(self.stdout, style::Print(halt_message.to_string()))?;
-                queue!(self.stdout, cursor::MoveToNextLine(0))?;
-            };
-            queue!(
-                self.stdout,
-                style::Print(format!(
-                    "PC: {:#06X} ({:#04x}{:02x})",
-                    chip8.pc,
-                    chip8.memory[chip8.pc as usize],
-                    chip8.memory[chip8.pc as usize + 1],
-                ))
-            )?;
+        queue!(
+            self.stdout,
+            cursor::MoveTo(0, (chip8.display.height + 1).into())
+        )?;
+        queue!(self.stdout, style::ResetColor)?;
+        if halted {
+            queue!(self.stdout, style::SetForegroundColor(style::Color::Red))?;
+            queue!(self.stdout, style::Print(halt_message.to_string()))?;
             queue!(self.stdout, cursor::MoveToNextLine(0))?;
-            queue!(self.stdout, style::Print(format!("I: {:#06X}", chip8.i)))?;
-            queue!(self.stdout, cursor::MoveToNextLine(0))?;
-            for v in 0..16 {
-                queue!(
-                    self.stdout,
-                    style::Print(format!("V{:X}: {:#04X}  ", v, chip8.v[v] as usize))
-                )?;
-            }
-            //execute!(self.stdout, cursor::MoveToNextLine(0))?;
-            //for v in 0..16 {
-            //    execute!(
-            //        self.stdout,
-            //        style::Print(format!("K{:X}: {} ", v, chip8.keyboard[v]))
-            //    )?;
-            //}
-        } else {
             queue!(self.stdout, style::ResetColor)?;
+        } else if interrupt {
+            queue!(self.stdout, style::Print(halt_message.to_string()))?;
+            queue!(self.stdout, cursor::MoveToNextLine(0))?;
+        };
+        queue!(
+            self.stdout,
+            style::Print(format!(
+                "PC: {:#06X} ({:#04x}{:02x})",
+                chip8.pc,
+                chip8.memory[chip8.pc as usize],
+                chip8.memory[chip8.pc as usize + 1],
+            ))
+        )?;
+        queue!(self.stdout, cursor::MoveToNextLine(0))?;
+        queue!(self.stdout, style::Print(format!("I: {:#06X}", chip8.i)))?;
+        queue!(self.stdout, cursor::MoveToNextLine(0))?;
+        for v in 0..16 {
             queue!(
                 self.stdout,
-                cursor::MoveTo(0, (chip8.display.height + 1).into()),
-                Clear(ClearType::FromCursorDown),
-                cursor::MoveTo(0, 0),
+                style::Print(format!("V{:X}: {:#04X}  ", v, chip8.v[v] as usize))
             )?;
         }
+        //execute!(self.stdout, cursor::MoveToNextLine(0))?;
+        //for v in 0..16 {
+        //    execute!(
+        //        self.stdout,
+        //        style::Print(format!("K{:X}: {} ", v, chip8.keyboard[v]))
+        //    )?;
+        //}
         self.stdout.flush()?;
+        Ok(())
+    }
+
+    pub(crate) fn erase_debug(&mut self, chip8: &Chip8) -> Result<()> {
+        execute!(
+            self.stdout,
+            style::ResetColor,
+            cursor::MoveTo(0, (chip8.display.height + 1).into()),
+            Clear(ClearType::FromCursorDown),
+            cursor::MoveTo(0, 0),
+        )?;
         Ok(())
     }
 }
